@@ -17,6 +17,7 @@ import {
   createTicketTypeRemote,
   createHotel,
   createRoomWithHotelId,
+  createBooking
 } from "../factories";
 import { cleanDb, generateValidToken } from "../helpers";
 
@@ -112,7 +113,6 @@ describe("GET /hotels", () => {
       const ticketType = await createTicketTypeWithHotel();
       const ticket = await createTicket(enrollment.id, ticketType.id, TicketStatus.PAID);
       const payment = await createPayment(ticket.id, ticketType.price);
-      //Hoteis no banco
 
       const response = await server.get("/hotels").set("Authorization", `Bearer ${token}`);
 
