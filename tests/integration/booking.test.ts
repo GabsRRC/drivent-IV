@@ -1,6 +1,7 @@
 import app, { init } from "@/app";
 import faker from "@faker-js/faker";
 import { TicketStatus } from "@prisma/client";
+import { prisma } from "@/config";
 import httpStatus from "http-status";
 import * as jwt from "jsonwebtoken";
 import supertest from "supertest";
@@ -13,7 +14,8 @@ import {
   createRoom,
   createBooking,
   createRoomCapacityOne,
-  createRoomCapacityThree
+  createRoomCapacityThree,
+  createRoomCapacityTwo
 } from "../factories";
 import { cleanDb, generateValidToken } from "../helpers";
 
@@ -137,7 +139,7 @@ describe("GET /booking", () => {
 
 // should respond with status 403 if no capacity [1, 2, 3]
 
-// should responde with status 403 if user already got booking
+// should respond with status 403 if user already got booking
 
 // should respond with status 200 and with bookingId
 
@@ -193,7 +195,7 @@ describe("POST /booking", () => {
       expect(response.status).toBe(httpStatus.NOT_FOUND);
     });
 
-    it("should respond with status 403 if no capacity", async () => {
+    it("should respond with status 403 if no capacity (capacity: one)", async () => {
       const user = await createUser();
       const token = await generateValidToken(user);
       const enrollment = await createEnrollmentWithAddress(user);
@@ -203,11 +205,38 @@ describe("POST /booking", () => {
       const hotel = await createHotel();
       const room = await createRoomCapacityOne(hotel.id);
 
-      const anotherUser = await createUser();
-      await generateValidToken(anotherUser);
-      const anotherEnrollment = await createEnrollmentWithAddress(anotherUser);
-      await createTicket(anotherEnrollment.id, ticketType.id, TicketStatus.PAID);
-      await createBooking(anotherUser.id, room.id);
+      const secondUser = await createUser();
+      await generateValidToken(secondUser);
+      const secondEnrollment = await createEnrollmentWithAddress(secondUser);
+      await createTicket(secondEnrollment.id, ticketType.id, TicketStatus.PAID);
+      await createBooking(secondUser.id, room.id);
+
+      const response = await server.post("/booking").set("Authorization", `Bearer ${token}`).send({ roomId: room.id });
+  
+      expect(response.status).toBe(httpStatus.FORBIDDEN);
+    });
+
+    it("should respond with status 403 if no capacity (capacity: two)", async () => {
+      const user = await createUser();
+      const token = await generateValidToken(user);
+      const enrollment = await createEnrollmentWithAddress(user);
+      const ticketType = await createTicketTypeIncludeHotel();
+      await createTicket(enrollment.id, ticketType.id, TicketStatus.PAID);
+
+      const hotel = await createHotel();
+      const room = await createRoomCapacityTwo(hotel.id);
+
+      const secondUser = await createUser();
+      await generateValidToken(secondUser);
+      const secondEnrollment = await createEnrollmentWithAddress(secondUser);
+      await createTicket(secondEnrollment.id, ticketType.id, TicketStatus.PAID);
+      await createBooking(secondUser.id, room.id);
+
+      const thirdUser = await createUser();
+      await generateValidToken(thirdUser);
+      const thirdEnrollment = await createEnrollmentWithAddress(thirdUser);
+      await createTicket(thirdEnrollment.id, ticketType.id, TicketStatus.PAID);
+      await createBooking(thirdUser.id, room.id);
 
       const response = await server.post("/booking").set("Authorization", `Bearer ${token}`).send({ roomId: room.id });
   
@@ -223,8 +252,9 @@ describe("POST /booking", () => {
       const hotel = await createHotel();
       const room = await createRoom(hotel.id);
       await createBooking(user.id, room.id);
+      const newRoom = await createRoom(hotel.id);
 
-      const response = await server.post("/booking").set("Authorization", `Bearer ${token}`).send({ roomId: room.id });
+      const response = await server.post("/booking").set("Authorization", `Bearer ${token}`).send({ roomId: newRoom.id });
 
       expect(response.status).toEqual(httpStatus.FORBIDDEN);
     });
@@ -245,7 +275,27 @@ describe("POST /booking", () => {
         {
           id: expect.any(Number),
         },
+
       );
+    });
+
+    it("should insert a new booking in the database", async () => {
+      const user = await createUser();
+      const token = await generateValidToken(user);
+      const enrollment = await createEnrollmentWithAddress(user);
+      const ticketType = await createTicketTypeIncludeHotel();
+      await createTicket(enrollment.id, ticketType.id, TicketStatus.PAID);
+      const hotel = await createHotel();
+      const room = await createRoom(hotel.id);
+
+      const beforeCount = await prisma.booking.count();
+
+      await server.post("/booking").set("Authorization", `Bearer ${token}`).send({ roomId: room.id });
+    
+      const afterCount = await prisma.booking.count();
+
+      expect(beforeCount).toEqual(0);
+      expect(afterCount).toEqual(1);
     });
   });
 });
@@ -379,6 +429,27 @@ describe("PUT /booking/:bookingId", () => {
           id: expect.any(Number),
         },
       );
+    });
+
+    it("should update (not create new) booking in the database", async () => {
+      const user = await createUser();
+      const token = await generateValidToken(user);
+      const enrollment = await createEnrollmentWithAddress(user);
+      const ticketType = await createTicketTypeIncludeHotel();
+      await createTicket(enrollment.id, ticketType.id, TicketStatus.PAID);
+      const hotel = await createHotel();
+      const room = await createRoomCapacityOne(hotel.id);
+      const booking = await createBooking(user.id, room.id);
+      const newRoom = await createRoomCapacityOne(hotel.id);
+      
+      const beforeCount = await prisma.booking.count();
+
+      await server.put(`/booking/${booking.id}`).set("Authorization", `Bearer ${token}`).send({ roomId: newRoom.id });
+    
+      const afterCount = await prisma.booking.count();
+
+      expect(beforeCount).toEqual(1);
+      expect(afterCount).toEqual(1);
     });
   });
 });

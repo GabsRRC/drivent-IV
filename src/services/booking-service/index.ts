@@ -26,8 +26,7 @@ async function checkRoom(roomId: number) {
     throw requestError(404, "Not Found");
   }
 
-  const roomCap = await bookingRepository.findRoomById(roomId);
-  if (roomCap.capacity == roomCap.Booking.length) {
+  if (roomData.capacity <= roomData.Booking.length) {
     throw requestError(403, "Forbidden");
   }
 }
@@ -63,13 +62,14 @@ async function bookingProcess(userId: number, roomId: number) {
 // PUT BOOKING FUNCTION
 async function updateBooking(userId: number, roomId: number) {
   await checkTicket(userId);
-  const bookingId2 = await checkBooking(userId);
-  if (bookingId2.Booking.length < 1) {
+  const bookingId = await checkBooking(userId);
+  if (bookingId.Booking.length < 1) {
     throw requestError(403, "Forbidden");
   }
   await checkRoom(roomId);
-  const bookingId = await bookingRepository.findBookingId(userId);
-  await bookingRepository.updateBookingById(bookingId.id, roomId);
+  const booking = await bookingRepository.findBookingId(userId);
+  await bookingRepository.updateBookingById(booking.id, roomId);
+
   const bookingData = await bookingRepository.findBookingId(userId);
   return bookingData;
 }
